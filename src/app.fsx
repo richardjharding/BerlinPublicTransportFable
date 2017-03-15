@@ -20,7 +20,7 @@ type vc= {b:float; f:float}
 type Ec ={b: float; f:float }
 type BoundingRect = {f: Ec; b:vc}
 type RadarItem = {direction:string; latitude: float ; longitude: float}
-type Model = {boundingRect: BoundingRect; zoomScale: ZoomScale; center: (float * float); Radar: RadarItem list}
+type Model = {boundingRect: BoundingRect; loading: bool; zoomScale: ZoomScale; center: (float * float); Radar: RadarItem list}
 
 type Message = 
     | GetRadar of BoundingRect
@@ -31,6 +31,9 @@ type Message =
     | ZoomChange of ZoomScale * BoundingRect
 
 type RCom = ComponentClass<obj>
+
+[<Import("Spinner", from="office-ui-fabric-react/lib/Spinner")>]
+let Spinner: RCom = jsNative
 
 [<Import("Map", from="google-maps-react")>]
 let MapComponent: RCom =jsNative
@@ -49,8 +52,8 @@ let google = getFromWindow "google"
 let inline (!!) x = createObj x
 let mapStyle = 
     createObj [
-         unbox ("width","100%");
-         unbox ("height", "100%");
+         unbox ("width","80%");
+         unbox ("height", "80%");
          unbox ("position", "relative")
     ]
 
@@ -102,25 +105,50 @@ let mapProps dispatch =
                                              ))))
                      ]
 
+let spinner (model:Model) = 
+    match model.loading with
+    | true -> 
+            Fable.Helpers.React.from Spinner (createObj[
+                                                        //"label" ==> "refreshing"
+                                                        ]) []
+    | false -> span [] []
+
+let header model = 
+    div [ClassName "ms-Grid-row"][
+         div [ClassName "ms-Grid-col"][
+                h2 [ClassName "ms-font-xl"] [text ("This is a live view of the Berlin public transport system built with Fable.IO")]  
+         ]
+         div [ClassName "ms-Grid-col"] [
+                spinner model 
+         ]         
+    ]
+
 
 let view (model:Model) dispatch = 
     div
-        []
+        [ClassName "ms-Grid"]
         [
-            h2 [] [text ("This is a live view of the Berlin public transport system")]            
-            Fable.Helpers.React.from MapComponent (mapProps( dispatch)) (MapMarkers model.Radar)           
+            div [ClassName "ms-Grid-row"] [
+                            header model
+                            div [ClassName "ms-Grid-col ms-u-sm6 ms-u-md4 ms-u-lg6"][                               
+                                div [ClassName "ms-Grid-row"][         
+                                    Fable.Helpers.React.from MapComponent (mapProps( dispatch)) (MapMarkers model.Radar) 
+                                ]
+                            ]  
+            ]        
         ]
 
 let update msg model : Model*Cmd<Message> = 
     match msg with
-    | GetRadar rect -> {model with boundingRect = rect}, Cmd.ofPromise fetchRadar rect GetRadarReceived GetRadarError
-    | Refresh -> model, Cmd.ofPromise fetchRadar model.boundingRect GetRadarReceived GetRadarError
-    | GetRadarError ex ->  {model with Radar = []}, []
-    | GetRadarReceived radarItems ->  {model with Radar = radarItems}, []
+    | GetRadar rect -> {model with boundingRect = rect; loading= true}, Cmd.ofPromise fetchRadar rect GetRadarReceived GetRadarError
+    | Refresh -> {model with loading= true}, Cmd.ofPromise fetchRadar model.boundingRect GetRadarReceived GetRadarError
+    | GetRadarError ex ->  {model with Radar = []; loading= false}, []
+    | GetRadarReceived radarItems ->  {model with Radar = radarItems; loading= false}, []
     | RadarSelected -> model, []
-    | ZoomChange (z,b) -> {model with boundingRect = b}, Cmd.ofPromise fetchRadar b GetRadarReceived GetRadarError
+    | ZoomChange (z,b) -> {model with boundingRect = b; loading= true}, Cmd.ofPromise fetchRadar b GetRadarReceived GetRadarError
 
 let init() = {boundingRect= {b= {b= 0.0; f= 0.0}; f= {b= 0.0; f= 0.0}};
+                        loading = false;
                      zoomScale = ZoomScale 14;
                       center = (52.531677, 13.381777);
                       Radar= []}, []

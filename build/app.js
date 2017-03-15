@@ -6,6 +6,7 @@ import _Symbol from "fable-core/Symbol";
 import { createObj, makeGeneric, Tuple, compareRecords, equalsRecords, compareUnions, equalsUnions } from "fable-core/Util";
 import { map as map_1, ofArray } from "fable-core/List";
 import List from "fable-core/List";
+import { Spinner as Spinner_1 } from "office-ui-fabric-react/lib/Spinner";
 import { Marker as Marker_1, Map as _Map } from "google-maps-react";
 import { fsFormat } from "fable-core/String";
 import { fetch as _fetch } from "../node_modules/fable-powerpack/Fetch";
@@ -192,10 +193,11 @@ export var RadarItem = function () {
 }();
 setType("App.RadarItem", RadarItem);
 export var Model = function () {
-  function Model(boundingRect, zoomScale, center, radar) {
+  function Model(boundingRect, loading, zoomScale, center, radar) {
     _classCallCheck(this, Model);
 
     this.boundingRect = boundingRect;
+    this.loading = loading;
     this.zoomScale = zoomScale;
     this.center = center;
     this.Radar = radar;
@@ -209,6 +211,7 @@ export var Model = function () {
         interfaces: ["FSharpRecord", "System.IEquatable", "System.IComparable"],
         properties: {
           boundingRect: BoundingRect,
+          loading: "boolean",
           zoomScale: ZoomScale,
           center: Tuple(["number", "number"]),
           Radar: makeGeneric(List, {
@@ -268,13 +271,14 @@ export var Message = function () {
   return Message;
 }();
 setType("App.Message", Message);
+export var Spinner = Spinner_1;
 export var MapComponent = _Map;
 export var Marker = Marker_1;
 export function text(content) {
   return content;
 }
 export var google = window["google"];
-export var mapStyle = createObj(ofArray([["width", "100%"], ["height", "100%"], ["position", "relative"]]));
+export var mapStyle = createObj(ofArray([["width", "80%"], ["height", "80%"], ["position", "relative"]]));
 export var startPos = {
   lat: 52.531677,
   lng: 13.381777
@@ -322,12 +326,41 @@ export function mapProps(dispatch) {
     }
   };
 }
+export function spinner(model) {
+  if (model.loading) {
+    return createElement(Spinner_1, {});
+  } else {
+    return createElement("span", {});
+  }
+}
+export function header(model) {
+  return createElement("div", {
+    className: "ms-Grid-row"
+  }, createElement("div", {
+    className: "ms-Grid-col"
+  }, createElement("h2", {
+    className: "ms-font-xl"
+  }, text("This is a live view of the Berlin public transport system built with Fable.IO"))), createElement("div", {
+    className: "ms-Grid-col"
+  }, spinner(model)));
+}
 export function view(model, dispatch) {
-  return createElement("div", {}, createElement("h2", {}, text("This is a live view of the Berlin public transport system")), createElement.apply(undefined, [_Map, mapProps(dispatch)].concat(_toConsumableArray(MapMarkers(model.Radar)))));
+  return createElement("div", {
+    className: "ms-Grid"
+  }, createElement("div", {
+    className: "ms-Grid-row"
+  }, header(model), createElement("div", {
+    className: "ms-Grid-col ms-u-sm6 ms-u-md4 ms-u-lg6"
+  }, createElement("div", {
+    className: "ms-Grid-row"
+  }, createElement.apply(undefined, [_Map, mapProps(dispatch)].concat(_toConsumableArray(MapMarkers(model.Radar))))))));
 }
 export function update(msg, model) {
   if (msg.Case === "Refresh") {
-    return [model, CmdModule.ofPromise(function (rect) {
+    return [function () {
+      var loading = true;
+      return new Model(model.boundingRect, loading, model.zoomScale, model.center, model.Radar);
+    }(), CmdModule.ofPromise(function (rect) {
       return fetchRadar(rect);
     }, model.boundingRect, function (arg0) {
       return new Message("GetRadarReceived", [arg0]);
@@ -337,14 +370,18 @@ export function update(msg, model) {
   } else if (msg.Case === "GetRadarError") {
     return [function () {
       var Radar = new List();
-      return new Model(model.boundingRect, model.zoomScale, model.center, Radar);
+      var loading_1 = false;
+      return new Model(model.boundingRect, loading_1, model.zoomScale, model.center, Radar);
     }(), new List()];
   } else if (msg.Case === "GetRadarReceived") {
-    return [new Model(model.boundingRect, model.zoomScale, model.center, msg.Fields[0]), new List()];
+    return [function () {
+      var loading_2 = false;
+      return new Model(model.boundingRect, loading_2, model.zoomScale, model.center, msg.Fields[0]);
+    }(), new List()];
   } else if (msg.Case === "RadarSelected") {
     return [model, new List()];
   } else if (msg.Case === "ZoomChange") {
-    return [new Model(msg.Fields[1], model.zoomScale, model.center, model.Radar), CmdModule.ofPromise(function (rect_1) {
+    return [new Model(msg.Fields[1], true, model.zoomScale, model.center, model.Radar), CmdModule.ofPromise(function (rect_1) {
       return fetchRadar(rect_1);
     }, msg.Fields[1], function (arg0_2) {
       return new Message("GetRadarReceived", [arg0_2]);
@@ -352,7 +389,7 @@ export function update(msg, model) {
       return new Message("GetRadarError", [arg0_3]);
     })];
   } else {
-    return [new Model(msg.Fields[0], model.zoomScale, model.center, model.Radar), CmdModule.ofPromise(function (rect_2) {
+    return [new Model(msg.Fields[0], true, model.zoomScale, model.center, model.Radar), CmdModule.ofPromise(function (rect_2) {
       return fetchRadar(rect_2);
     }, msg.Fields[0], function (arg0_4) {
       return new Message("GetRadarReceived", [arg0_4]);
@@ -365,7 +402,7 @@ export function init() {
   return [new Model(function () {
     var b = new vc(0, 0);
     return new BoundingRect(new Ec(0, 0), b);
-  }(), new ZoomScale("ZoomScale", [14]), [52.531677, 13.381777], new List()), new List()];
+  }(), false, new ZoomScale("ZoomScale", [14]), [52.531677, 13.381777], new List()), new List()];
 }
 export function timerTick(dispatch) {
   var t = new Timer(10000);
